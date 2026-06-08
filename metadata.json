@@ -1,0 +1,6 @@
+{
+  "name": "IKA - Galerie Photo Evénementielle Live",
+  "description": "Plateforme de galerie photo événementielle live en temps réel pour partager les souvenirs de vos événements instantanément.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
