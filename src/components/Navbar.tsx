@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { User } from "../types";
 import { UserCircle, LogOut, Menu, X, Shield, Camera, LayoutDashboard } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { IkaLogo } from "./IkaLogo";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -74,10 +75,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo IKA */}
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="font-sans text-2xl font-extrabold tracking-tighter text-black select-none">
-              IKA
-            </span>
+          <Link to="/" className="flex items-center gap-2">
+            <IkaLogo size={32} />
+            <span className="font-bold text-lg tracking-tight">IKA</span>
           </Link>
 
           {/* Nav Links - Desktop */}
