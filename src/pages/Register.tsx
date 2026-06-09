@@ -66,7 +66,11 @@ export default function Register() {
           });
           
           if (insertError) {
-            console.warn("Failed to insert user profile.", insertError);
+            // If the database trigger already inserted it, we get a duplicate key violation (23505).
+            // We only throw if it is any other error (such as RLS block).
+            if (insertError.code !== "23505") {
+              throw new Error("Impossible de créer le profil en base de données : " + insertError.message);
+            }
           }
 
           setSuccess(true);

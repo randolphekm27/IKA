@@ -21,44 +21,76 @@ export default function PhotographerDesk() {
   useEffect(() => {
     if (!eventId) return;
 
-    // 1. Recover logged user if any
-    const savedUser = localStorage.getItem("ika_user");
-    if (savedUser) {
+    const checkAuthAndFetch = async () => {
+      // 1. Verify real Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+
+      const savedUser = localStorage.getItem("ika_user");
+      if (!savedUser) {
+        navigate("/login");
+        return;
+      }
+
       try {
-        const u = JSON.parse(savedUser);
+        const u: User = JSON.parse(savedUser);
         setCurrentUser(u);
         setGuestName(u.name);
-      } catch {
-        setCurrentUser(null);
-      }
-    } else {
-      // If guest, set defaults
-      const cachedGuestName = localStorage.getItem("ika_guest_name");
-      if (cachedGuestName) {
-        setGuestName(cachedGuestName);
-      } else {
-        setGuestName("Anonyme");
-      }
-    }
 
-    // 2. Fetch event metadata and existing uploaded photos
-    Promise.all([
-      supabase.from('events').select('*').eq('id', eventId).single().then(({ data, error }) => {
-        if (error || !data) throw new Error("Événement introuvable");
-        return data;
-      }),
-      supabase.from('photos').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).then(({ data }) => data || []),
-    ])
-      .then(([eventData, photosData]) => {
+        // 2. Fetch event metadata and existing uploaded photos
+        const [eventData, photosData] = await Promise.all([
+          supabase.from('events').select('*').eq('id', eventId).single().then(({ data, error }) => {
+            if (error || !data) throw new Error("Événement introuvable");
+            return data;
+          }),
+          supabase.from('photos').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).then(({ data }) => data || []),
+        ]);
+
+        // 3. Verify upload authorization:
+        // - Admin can always access
+        // - Event Creator (Organisateur) can always access
+        // - Photographer who is assigned to this event can access
+        let authorized = false;
+        if (u.role === "admin") {
+          authorized = true;
+        } else if (u.role === "organisateur" && eventData.created_by === u.id) {
+          authorized = true;
+        } else if (u.role === "photographe") {
+          const { data: assignment, error: assignErr } = await supabase
+            .from('event_photographers')
+            .select('id')
+            .eq('event_id', eventId)
+            .eq('photographer_id', u.id)
+            .eq('revoked', false)
+            .maybeSingle();
+
+          if (assignment && !assignErr) {
+            authorized = true;
+          }
+        }
+
+        if (!authorized) {
+          setErrorMsg("Accès refusé. Vous n'êtes pas autorisé à décharger des photos pour cet événement.");
+          setLoading(false);
+          return;
+        }
+
         setEvent(eventData);
         setPhotos(photosData);
         setLoading(false);
-      })
-      .catch((err) => {
+      } catch (err: any) {
         setErrorMsg(err.message || "Impossible de charger la console photographe");
         setLoading(false);
-      });
-  }, [eventId]);
+      }
+    };
+
+    checkAuthAndFetch();
+  }, [eventId, navigate]);
 
   const handleGuestNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;

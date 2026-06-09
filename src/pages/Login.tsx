@@ -34,15 +34,37 @@ export default function Login() {
         throw new Error("Erreur inattendue");
       }
 
-      // Fetch user profile
-      const { data: userProfile, error: profileError } = await supabase
+      // Fetch user profile (or auto-create if missing)
+      let userProfile = null;
+      const { data: existingProfile } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError || !userProfile) {
-        throw new Error("Profil utilisateur introuvable.");
+      if (existingProfile) {
+        userProfile = existingProfile;
+      } else {
+        // Fallback: If public.users is missing, create it using auth metadata
+        const metadata = authData.user.user_metadata || {};
+        const newProfile = {
+          id: authData.user.id,
+          name: metadata.name || authData.user.email?.split('@')[0] || "Utilisateur IKA",
+          email: authData.user.email || "",
+          role: metadata.role || "organisateur",
+          status: "active"
+        };
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('users')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (insertError) {
+          throw new Error("Profil utilisateur introuvable et impossible de le créer : " + insertError.message);
+        }
+        userProfile = inserted;
       }
 
       // Save user session

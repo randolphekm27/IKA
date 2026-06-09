@@ -14,6 +14,7 @@ export default function LiveGallery() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const [isAuthorizedUploader, setIsAuthorizedUploader] = useState(false);
   
   // Keep track of eventId for SSE reconnection if needed
   const eventIdRef = useRef<string>("");
@@ -50,6 +51,44 @@ export default function LiveGallery() {
            if (error) console.warn("Failed tracking visit", error);
         };
         trackVisit();
+
+        // Check if current user is an authorized uploader (admin, owner, or assigned photographer)
+        const checkUploaderAuth = async () => {
+          const savedUser = localStorage.getItem("ika_user");
+          if (!savedUser) {
+            setIsAuthorizedUploader(false);
+            return;
+          }
+          try {
+            const u = JSON.parse(savedUser);
+            if (u.role === "admin") {
+              setIsAuthorizedUploader(true);
+              return;
+            }
+            if (u.role === "organisateur" && eventData.created_by === u.id) {
+              setIsAuthorizedUploader(true);
+              return;
+            }
+            
+            // Check if photographer is assigned
+            const { data: assignment, error: assignErr } = await supabase
+              .from('event_photographers')
+              .select('id')
+              .eq('event_id', eventData.id)
+              .eq('photographer_id', u.id)
+              .eq('revoked', false)
+              .maybeSingle();
+              
+            if (assignment && !assignErr) {
+              setIsAuthorizedUploader(true);
+            } else {
+              setIsAuthorizedUploader(false);
+            }
+          } catch {
+            setIsAuthorizedUploader(false);
+          }
+        };
+        checkUploaderAuth();
 
         const { data: photosData, error: photosError } = await supabase
           .from('photos')
@@ -223,15 +262,17 @@ export default function LiveGallery() {
           </div>
 
           {/* Quick guest action button to upload their files */}
-          <div className="w-full md:w-auto shrink-0">
-            <Link
-              to={`/photographe/${event.id}`}
-              className="w-full md:w-auto inline-flex items-center justify-center space-x-2 px-5 py-3 border border-neutral-800 bg-neutral-900 hover:bg-white hover:text-black transition-all cursor-pointer font-semibold text-xs tracking-wider uppercase text-center"
-            >
-              <Camera size={14} />
-              <span>Charger mes photos</span>
-            </Link>
-          </div>
+          {isAuthorizedUploader && (
+            <div className="w-full md:w-auto shrink-0">
+              <Link
+                to={`/photographe/${event.id}`}
+                className="w-full md:w-auto inline-flex items-center justify-center space-x-2 px-5 py-3 border border-neutral-800 bg-neutral-900 hover:bg-white hover:text-black transition-all cursor-pointer font-semibold text-xs tracking-wider uppercase text-center"
+              >
+                <Camera size={14} />
+                <span>Charger mes photos</span>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
@@ -245,15 +286,17 @@ export default function LiveGallery() {
             <div className="space-y-1">
               <h3 className="text-xs font-mono uppercase tracking-widest text-neutral-300">En attente de transmission</h3>
               <p className="text-xs text-neutral-500 font-sans">
-                La galerie est connectée au flux satellite. Scannez le QR Code de l'événement pour charger les premières photos depuis votre appareil !
+                La galerie est connectée au flux satellite. Dès que le photographe officiel commencera à transmettre des clichés, ils apparaîtront ici en temps réel.
               </p>
             </div>
-            <Link
-              to={`/photographe/${event.id}`}
-              className="inline-block border border-neutral-800 text-neutral-300 hover:text-white px-4 py-2 text-[10px] font-mono uppercase transition-colors"
-            >
-              Uploader une photo test
-            </Link>
+            {isAuthorizedUploader && (
+              <Link
+                to={`/photographe/${event.id}`}
+                className="inline-block border border-neutral-800 text-neutral-300 hover:text-white px-4 py-2 text-[10px] font-mono uppercase transition-colors"
+              >
+                Uploader une photo test
+              </Link>
+            )}
           </div>
         ) : (
           <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-px bg-black">
