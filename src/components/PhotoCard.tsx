@@ -52,7 +52,7 @@ export default function PhotoCard({ photo, onClick, onDelete, canDelete = false 
       {/* Modern gradient / flat overlay */}
       <div 
         onClick={onClick}
-        className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 text-left"
+        className="absolute inset-0 bg-linear-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 text-left"
       >
         <div className="space-y-1 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
           <div className="flex items-center space-x-1.5 text-[11px] font-mono uppercase tracking-widest text-neutral-300">
