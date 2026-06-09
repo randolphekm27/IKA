@@ -13,57 +13,69 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Authenticate check
-    const savedUser = localStorage.getItem("ika_user");
-    if (!savedUser) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      const user: User = JSON.parse(savedUser);
-      if (user.role !== "organisateur" && user.role !== "admin") {
-        // Rediriger si visiteur sans autorisation
-        navigate("/");
+    const checkAuthAndFetch = async () => {
+      // 1. Verify real Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setCurrentUser(user);
 
-      Promise.all([
-        supabase
-          .from('events')
-          .select('*, photos(count), visits(count)')
-          .eq('created_by', user.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('photos')
-          .select('download_count, events!inner(created_by)')
-          .eq('events.created_by', user.id)
-      ])
-        .then(([eventsRes, photosRes]) => {
-          if (eventsRes.error) throw eventsRes.error;
-          
-          const formattedEvents = eventsRes.data?.map((e: any) => ({
-            ...e,
-            photo_count: e.photos?.[0]?.count || 0,
-            visit_count: e.visits?.[0]?.count || 0
-          })) || [];
-          setEvents(formattedEvents);
+      const savedUser = localStorage.getItem("ika_user");
+      if (!savedUser) {
+        navigate("/login");
+        return;
+      }
 
-          const totalEvents = formattedEvents.length;
-          const totalPhotos = photosRes.data?.length || 0;
-          const totalDownloads = photosRes.data?.reduce((acc: number, p: any) => acc + (p.download_count || 0), 0) || 0;
-          
-          setStats({ totalEvents, totalPhotos, totalDownloads });
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error("Dashboard failed to retrieve user data", err);
-          setLoading(false);
-        });
-    } catch {
-      navigate("/login");
-    }
+      try {
+        const user: User = JSON.parse(savedUser);
+        if (user.role !== "organisateur" && user.role !== "admin") {
+          // Rediriger si visiteur sans autorisation
+          navigate("/");
+          return;
+        }
+        setCurrentUser(user);
+
+        Promise.all([
+          supabase
+            .from('events')
+            .select('*, photos(count), visits(count)')
+            .eq('created_by', user.id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('photos')
+            .select('download_count, events!inner(created_by)')
+            .eq('events.created_by', user.id)
+        ])
+          .then(([eventsRes, photosRes]) => {
+            if (eventsRes.error) throw eventsRes.error;
+            
+            const formattedEvents = eventsRes.data?.map((e: any) => ({
+              ...e,
+              photo_count: e.photos?.[0]?.count || 0,
+              visit_count: e.visits?.[0]?.count || 0
+            })) || [];
+            setEvents(formattedEvents);
+
+            const totalEvents = formattedEvents.length;
+            const totalPhotos = photosRes.data?.length || 0;
+            const totalDownloads = photosRes.data?.reduce((acc: number, p: any) => acc + (p.download_count || 0), 0) || 0;
+            
+            setStats({ totalEvents, totalPhotos, totalDownloads });
+            setLoading(false);
+          })
+          .catch((err) => {
+            console.error("Dashboard failed to retrieve user data", err);
+            setLoading(false);
+          });
+      } catch {
+        navigate("/login");
+      }
+    };
+
+    checkAuthAndFetch();
   }, [navigate]);
 
   if (loading) {

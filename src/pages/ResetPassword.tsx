@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { Lock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -13,20 +12,9 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      setError("Le jeton de réinitialisation est absent ou invalide.");
-    }
-  }, [token]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    if (!token) {
-      setError("Jeton invalide.");
-      return;
-    }
 
     if (password.length < 8) {
       setError("Le mot de passe doit faire au moins 8 caractères.");
@@ -41,15 +29,12 @@ export default function ResetPassword() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+      const { error } = await supabase.auth.updateUser({
+        password: password
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Erreur de réinitialisation.");
+      if (error) {
+        throw new Error(error.message || "Erreur de réinitialisation.");
       }
 
       setSuccess(true);
@@ -116,7 +101,7 @@ export default function ResetPassword() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full text-xs bg-neutral-50 border border-neutral-200 outline-none focus:border-black rounded-none pl-9 pr-3 py-3"
-                    disabled={loading || !token}
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -136,14 +121,14 @@ export default function ResetPassword() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full text-xs bg-neutral-50 border border-neutral-200 outline-none focus:border-black rounded-none pl-9 pr-3 py-3"
-                    disabled={loading || !token}
+                    disabled={loading}
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading || !token}
+                disabled={loading}
                 className="w-full bg-black text-white py-3.5 text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-colors flex items-center justify-center space-x-2"
               >
                 {loading ? (

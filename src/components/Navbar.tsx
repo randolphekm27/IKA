@@ -25,13 +25,38 @@ export default function Navbar() {
     };
 
     checkUser();
-    // Poll loosely or listen to storage changes
+
+    // Subscribe to auth state changes in Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        const saved = localStorage.getItem("ika_user");
+        const parsedSaved = saved ? JSON.parse(saved) : null;
+        
+        if (!parsedSaved || parsedSaved.id !== session.user.id) {
+          const { data: profile } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+            
+          if (profile) {
+            localStorage.setItem("ika_user", JSON.stringify(profile));
+            localStorage.setItem("ika_token", session.access_token);
+            setUser(profile);
+          }
+        }
+      } else {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        setUser(null);
+      }
+    });
+
     window.addEventListener("storage", checkUser);
-    const interval = setInterval(checkUser, 1000);
 
     return () => {
+      subscription.unsubscribe();
       window.removeEventListener("storage", checkUser);
-      clearInterval(interval);
     };
   }, []);
 
@@ -91,9 +116,15 @@ export default function Navbar() {
             )}
 
             {user && user.role === "photographe" && (
-              <span className="text-xs font-mono bg-neutral-100 text-neutral-800 px-2 py-1 rounded">
-                Espace Photographe actif
-              </span>
+              <Link
+                to="/photographe"
+                className={`flex items-center space-x-1.5 text-sm font-medium transition-colors ${
+                  location.pathname === "/photographe" ? "text-black" : "text-neutral-500 hover:text-black"
+                }`}
+              >
+                <Camera size={16} />
+                <span>Photographe</span>
+              </Link>
             )}
           </nav>
 
@@ -122,7 +153,7 @@ export default function Navbar() {
                   Connexion
                 </Link>
                 <Link
-                  to="/dashboard/events/new"
+                  to="/login?redirect=/dashboard/events/new"
                   className="text-xs font-semibold bg-black text-white hover:bg-neutral-800 px-4 py-2 border border-black transition-colors rounded-none"
                 >
                   Créer un événement
@@ -171,6 +202,16 @@ export default function Navbar() {
               className="block px-3 py-2 rounded-md text-base font-medium text-neutral-600 hover:text-black hover:bg-neutral-50"
             >
               Administration
+            </Link>
+          )}
+
+          {user && user.role === "photographe" && (
+            <Link
+              to="/photographe"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-neutral-600 hover:text-black hover:bg-neutral-50"
+            >
+              Espace Photographe
             </Link>
           )}
 

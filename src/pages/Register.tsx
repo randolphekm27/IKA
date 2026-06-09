@@ -9,10 +9,14 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"organisateur" | "photographe">("organisateur");
+  const [role, setRole] = useState<"organisateur" | "photographe">(() => {
+    const isJoining = sessionStorage.getItem("ika_redirect_join");
+    return isJoining ? "photographe" : "organisateur";
+  });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [emailConfirmRequired, setEmailConfirmRequired] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,44 +56,58 @@ export default function Register() {
       }
 
       if (authData.user) {
-        // Manually insert into public.users in case the DB trigger isn't available
-        const { error: insertError } = await supabase.from('users').insert({
-          id: authData.user.id,
-          name: name,
-          email: email,
-          role: role
-        });
-        
-        if (insertError) {
-          console.warn("Failed to insert user profile. They might already exist or RLS blocked it.", insertError);
+        if (authData.session) {
+          // Email confirmation is disabled, user is immediately logged in
+          const { error: insertError } = await supabase.from('users').insert({
+            id: authData.user.id,
+            name: name,
+            email: email,
+            role: role
+          });
+          
+          if (insertError) {
+            console.warn("Failed to insert user profile.", insertError);
+          }
+
+          setSuccess(true);
+          setEmailConfirmRequired(false);
+
+          // Save session
+          const userProfile = { id: authData.user.id, name, email, role, status: 'active' };
+          localStorage.setItem("ika_user", JSON.stringify(userProfile));
+          localStorage.setItem("ika_token", authData.session.access_token || "");
+          window.dispatchEvent(new Event("storage"));
+
+          setTimeout(() => {
+            const searchParams = new URLSearchParams(window.location.search);
+            const redirectParam = searchParams.get("redirect");
+
+            const delayedJoinPath = sessionStorage.getItem("ika_redirect_join");
+            if (delayedJoinPath) {
+              sessionStorage.removeItem("ika_redirect_join");
+              navigate(delayedJoinPath);
+              return;
+            }
+
+            if (redirectParam) {
+              navigate(redirectParam);
+              return;
+            }
+
+            if (role === "organisateur") {
+              navigate("/dashboard");
+            } else if (role === "photographe") {
+              navigate("/photographe");
+            } else {
+              navigate("/");
+            }
+          }, 2000);
+        } else {
+          // Email confirmation is required by Supabase, session is null
+          setSuccess(true);
+          setEmailConfirmRequired(true);
         }
       }
-
-      setSuccess(true);
-      
-      // Auto login in memory
-      setTimeout(() => {
-        const userProfile = { id: authData.user?.id, name, email, role, status: 'active' };
-        localStorage.setItem("ika_user", JSON.stringify(userProfile));
-        localStorage.setItem("ika_token", authData.session?.access_token || "");
-        window.dispatchEvent(new Event("storage"));
-        
-        // Check if we have a delayed redirection token acceptance loop
-        const delayedJoinPath = sessionStorage.getItem("ika_redirect_join");
-        if (delayedJoinPath) {
-          sessionStorage.removeItem("ika_redirect_join");
-          navigate(delayedJoinPath);
-          return;
-        }
-
-        if (role === "organisateur") {
-          navigate("/dashboard");
-        } else if (role === "photographe") {
-          navigate("/photographe");
-        } else {
-          navigate("/");
-        }
-      }, 2000);
 
     } catch (err: any) {
       setError(err.message || "Impossible de compléter l'inscription.");
@@ -118,12 +136,33 @@ export default function Register() {
             </div>
             <div className="space-y-1">
               <h3 className="text-sm font-bold text-black uppercase">Inscription Réussie !</h3>
-              <p className="text-[11px] font-mono text-neutral-500">
-                Votre compte a été créé avec succès.
-              </p>
-              <p className="text-xs text-neutral-600 font-sans pt-1">
-                Redirection automatique vers votre espace...
-              </p>
+              {emailConfirmRequired ? (
+                <>
+                  <p className="text-[11px] font-mono text-neutral-500">
+                    Un e-mail de confirmation vous a été envoyé.
+                  </p>
+                  <p className="text-xs text-neutral-600 font-sans pt-2">
+                    Veuillez cliquer sur le lien dans l'e-mail pour valider votre compte, puis connectez-vous.
+                  </p>
+                  <div className="pt-4">
+                    <Link
+                      to={`/login${window.location.search}`}
+                      className="inline-block bg-black text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider"
+                    >
+                      Aller à la page de connexion
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] font-mono text-neutral-500">
+                    Votre compte a été créé avec succès.
+                  </p>
+                  <p className="text-xs text-neutral-600 font-sans pt-1">
+                    Redirection automatique vers votre espace...
+                  </p>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -265,7 +304,7 @@ export default function Register() {
 
             <div className="text-center pt-2 text-xs text-neutral-400">
               Déjà inscrit ?{" "}
-              <Link to="/login" className="text-black font-semibold uppercase tracking-wider hover:underline ml-1">
+              <Link to={`/login${window.location.search}`} className="text-black font-semibold uppercase tracking-wider hover:underline ml-1">
                 Se connecter
               </Link>
             </div>

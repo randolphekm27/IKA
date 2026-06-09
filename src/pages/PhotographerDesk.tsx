@@ -16,6 +16,7 @@ export default function PhotographerDesk() {
   const [guestName, setGuestName] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localUploadedPhotoIds, setLocalUploadedPhotoIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -68,6 +69,7 @@ export default function PhotographerDesk() {
   const handleUploadSuccess = (newPhoto: Photo) => {
     // Add new photo at the top of the local list
     setPhotos((prev) => [newPhoto, ...prev]);
+    setLocalUploadedPhotoIds((prev) => [...prev, newPhoto.id]);
   };
 
   const handleDeletePhoto = async (photoId: string) => {
@@ -131,13 +133,14 @@ export default function PhotographerDesk() {
   // - The logged in Photographe can delete their own uploaded photos
   // - Guest can delete their own uploaded photos if matched by user id (or uploader)
   const canUserDeletePhoto = (photo: Photo) => {
-    if (!currentUser) {
+    if (currentUser) {
+      if (currentUser.role === "admin") return true;
+      if (currentUser.role === "organisateur" && event.created_by === currentUser.id) return true;
+      if (photo.uploaded_by === currentUser.id) return true;
+    } else {
       // If guest uploaded in the current session, let them delete for safety
-      return photo.uploaded_by === "invite";
+      if (localUploadedPhotoIds.includes(photo.id)) return true;
     }
-    if (currentUser.role === "admin") return true;
-    if (currentUser.role === "organisateur" && event.created_by === currentUser.id) return true;
-    if (photo.uploaded_by === currentUser.id) return true;
     return false;
   };
 

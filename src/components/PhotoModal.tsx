@@ -52,6 +52,17 @@ export default function PhotoModal({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // 2. Increment download count in database
+      const newCount = (photo.download_count || 0) + 1;
+      const { error } = await supabase
+        .from('photos')
+        .update({ download_count: newCount })
+        .eq('id', photo.id);
+        
+      if (!error && onDownloadIncrement) {
+        onDownloadIncrement(photo.id, newCount);
+      }
     } catch (err) {
       console.error("Direct download failed, falling back to basic redirect", err);
       const link = document.createElement("a");

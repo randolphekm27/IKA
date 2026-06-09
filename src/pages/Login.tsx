@@ -52,11 +52,20 @@ export default function Login() {
       // Trigger custom storage event for Navbar update
       window.dispatchEvent(new Event("storage"));
 
+      // Check if we have a redirect search param
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectParam = searchParams.get("redirect");
+
       // Check if we have a delayed redirection token acceptance loop
       const delayedJoinPath = sessionStorage.getItem("ika_redirect_join");
       if (delayedJoinPath) {
         sessionStorage.removeItem("ika_redirect_join");
         navigate(delayedJoinPath);
+        return;
+      }
+
+      if (redirectParam) {
+        navigate(redirectParam);
         return;
       }
 
@@ -162,7 +171,7 @@ export default function Login() {
         <div className="flex flex-col space-y-2 text-center pt-2 text-xs">
           <div className="text-neutral-400">
             Pas encore de compte ?{" "}
-            <Link to="/register" className="text-black font-semibold uppercase tracking-wider hover:underline ml-1">
+            <Link to={`/register${window.location.search}`} className="text-black font-semibold uppercase tracking-wider hover:underline ml-1">
               Rejoindre IKA
             </Link>
           </div>

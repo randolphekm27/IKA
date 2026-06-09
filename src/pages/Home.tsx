@@ -7,8 +7,29 @@ import { supabase } from "../lib/supabase";
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any | null>(null);
 
   useEffect(() => {
+    const saved = localStorage.getItem("ika_user");
+    if (saved) {
+      try {
+        setUser(JSON.parse(saved));
+      } catch {}
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        const savedUser = localStorage.getItem("ika_user");
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch {}
+        }
+      } else {
+        setUser(null);
+      }
+    });
+
     const fetchEvents = async () => {
       const { data, error } = await supabase
         .from('events')
@@ -24,7 +45,12 @@ export default function Home() {
       }
       setLoading(false);
     };
+    
     fetchEvents();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const topEventName = events.length > 0 ? events[0].name : "DÉMO LIVE 2026";
@@ -69,14 +95,14 @@ export default function Home() {
             <div className="space-y-4 w-full sm:w-auto">
               <Link
                 id="cta-create-event-home"
-                to="/dashboard/events/new"
+                to={user ? "/dashboard/events/new" : "/login?redirect=/dashboard/events/new"}
                 className="inline-block bg-black text-white hover:bg-neutral-800 transition-colors px-6 py-4 text-xs font-bold uppercase tracking-wider text-center"
               >
                 Créer un événement
               </Link>
               <div className="block">
                 <Link
-                  to="/login"
+                  to={user ? "/dashboard" : "/login"}
                   className="text-xs font-extrabold text-[#777] hover:text-black uppercase tracking-wider transition-colors inline-flex items-center space-x-1"
                 >
                   <span>Accès Organisateur</span>

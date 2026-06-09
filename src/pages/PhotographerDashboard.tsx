@@ -11,22 +11,31 @@ export default function PhotographerDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("ika_user");
-    if (!savedUser) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      const userObj: User = JSON.parse(savedUser);
-      if (userObj.role !== "photographe" && userObj.role !== "admin") {
-        navigate("/dashboard");
+    const checkAuthAndFetch = async () => {
+      // 1. Verify real Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setCurrentUser(userObj);
 
-      // Fetch assigned events list
-      const fetchAssigned = async () => {
+      const savedUser = localStorage.getItem("ika_user");
+      if (!savedUser) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const userObj: User = JSON.parse(savedUser);
+        if (userObj.role !== "photographe" && userObj.role !== "admin") {
+          navigate("/dashboard");
+          return;
+        }
+        setCurrentUser(userObj);
+
+        // Fetch assigned events list
         const { data, error } = await supabase
           .from('event_photographers')
           .select('events(*, photos(count))')
@@ -43,11 +52,12 @@ export default function PhotographerDashboard() {
           setEvents(mappedEvents);
         }
         setLoading(false);
-      };
-      fetchAssigned();
-    } catch {
-      navigate("/login");
-    }
+      } catch {
+        navigate("/login");
+      }
+    };
+
+    checkAuthAndFetch();
   }, [navigate]);
 
   if (loading) {

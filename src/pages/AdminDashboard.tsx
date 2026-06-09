@@ -16,50 +16,62 @@ export default function AdminDashboard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. Authenticate check: Must be admin role
-    const savedUser = localStorage.getItem("ika_user");
-    if (!savedUser) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      const userObj: User = JSON.parse(savedUser);
-      if (userObj.role !== "admin") {
-        // Rediriger si non-admin
-        navigate("/dashboard");
+    const checkAuthAndFetch = async () => {
+      // 1. Verify real Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setCurrentUser(userObj);
 
-      // 2. Fetch all system directory data
-      Promise.all([
-        supabase.from('users').select('*').order('created_at', { ascending: false }),
-        supabase.from('events').select('*, photos(count), visits(count)').order('created_at', { ascending: false }),
-      ])
-        .then(([usersRes, eventsRes]) => {
-          if (usersRes.error) throw usersRes.error;
-          if (eventsRes.error) throw eventsRes.error;
-          
-          setUsers(usersRes.data || []);
-          
-          const formattedEvents = eventsRes.data?.map((e: any) => ({
-            ...e,
-            photo_count: e.photos?.[0]?.count || 0,
-            visit_count: e.visits?.[0]?.count || 0
-          })) || [];
-          setEvents(formattedEvents);
-          
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error("Admin dashboard failed to load catalogs", err);
-          setErrorMessage("Impossible de joindre le catalogue d'administration.");
-          setLoading(false);
-        });
-    } catch {
-      navigate("/login");
-    }
+      const savedUser = localStorage.getItem("ika_user");
+      if (!savedUser) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const userObj: User = JSON.parse(savedUser);
+        if (userObj.role !== "admin") {
+          // Rediriger si non-admin
+          navigate("/dashboard");
+          return;
+        }
+        setCurrentUser(userObj);
+
+        // 2. Fetch all system directory data
+        Promise.all([
+          supabase.from('users').select('*').order('created_at', { ascending: false }),
+          supabase.from('events').select('*, photos(count), visits(count)').order('created_at', { ascending: false }),
+        ])
+          .then(([usersRes, eventsRes]) => {
+            if (usersRes.error) throw usersRes.error;
+            if (eventsRes.error) throw eventsRes.error;
+            
+            setUsers(usersRes.data || []);
+            
+            const formattedEvents = eventsRes.data?.map((e: any) => ({
+              ...e,
+              photo_count: e.photos?.[0]?.count || 0,
+              visit_count: e.visits?.[0]?.count || 0
+            })) || [];
+            setEvents(formattedEvents);
+            
+            setLoading(false);
+          })
+          .catch((err) => {
+            console.error("Admin dashboard failed to load catalogs", err);
+            setErrorMessage("Impossible de joindre le catalogue d'administration.");
+            setLoading(false);
+          });
+      } catch {
+        navigate("/login");
+      }
+    };
+
+    checkAuthAndFetch();
   }, [navigate]);
 
   const handleRoleChange = async (userId: string, newRole: "admin" | "organisateur" | "photographe" | "invite") => {

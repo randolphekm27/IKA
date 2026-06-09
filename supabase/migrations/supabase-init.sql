@@ -300,3 +300,34 @@ create policy "Reset tokens are server-managed"
   on public.reset_tokens for select
   using (false); -- Only accessible via service_role key
 
+
+-- ============================================================
+-- AUTO-CREATE PROFILE TRIGGER
+-- Automatically sync auth.users with public.users
+-- ============================================================
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.users (id, name, email, role, status)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'name', 'Utilisateur IKA'),
+    new.email,
+    coalesce(new.raw_user_meta_data->>'role', 'organisateur'),
+    'active'
+  )
+  on conflict (id) do update
+  set name = excluded.name,
+      role = excluded.role;
+  return new;
+end;
+$$;
+
+-- Trigger the function after any new user is inserted in auth.users
+create or replace trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+

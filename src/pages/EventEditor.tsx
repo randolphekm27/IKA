@@ -36,29 +36,38 @@ export default function EventEditor() {
   const [togglingInvite, setTogglingInvite] = useState(false);
 
   useEffect(() => {
-    // 1. Check Session Authentication
-    const savedUser = localStorage.getItem("ika_user");
-    if (!savedUser) {
-      navigate("/login");
-      return;
-    }
-    try {
-      const u = JSON.parse(savedUser);
-      if (u.role !== "organisateur" && u.role !== "admin") {
-        navigate("/");
+    const checkAuthAndFetch = async () => {
+      // 1. Check Session Authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        localStorage.removeItem("ika_user");
+        localStorage.removeItem("ika_token");
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setCurrentUser(u);
-    } catch {
-      navigate("/login");
-      return;
-    }
 
-    // 2. If edit mode, retrieve existing details
-    if (isEditMode && id) {
-      setFetchingEvent(true);
+      const savedUser = localStorage.getItem("ika_user");
+      if (!savedUser) {
+        navigate("/login");
+        return;
+      }
       
-      const fetchEvent = async () => {
+      let userObj: UserType;
+      try {
+        userObj = JSON.parse(savedUser);
+        if (userObj.role !== "organisateur" && userObj.role !== "admin") {
+          navigate("/");
+          return;
+        }
+        setCurrentUser(userObj);
+      } catch {
+        navigate("/login");
+        return;
+      }
+
+      // 2. If edit mode, retrieve existing details
+      if (isEditMode && id) {
+        setFetchingEvent(true);
         try {
           const { data, error } = await supabase
             .from('events')
@@ -67,6 +76,12 @@ export default function EventEditor() {
             .single();
             
           if (error || !data) throw new Error("Événement introuvable");
+          
+          // Verify owner (unless admin)
+          if (data.created_by !== userObj.id && userObj.role !== "admin") {
+            throw new Error("Vous n'êtes pas l'organisateur de cet événement.");
+          }
+
           setEventId(data.id);
           setName(data.name);
           setDescription(data.description || "");
@@ -89,14 +104,15 @@ export default function EventEditor() {
             }));
             setPhotographers(mapped);
           }
-          setFetchingEvent(false);
         } catch (err: any) {
           setErrorMessage(err.message || "Erreur de chargement");
+        } finally {
           setFetchingEvent(false);
         }
-      };
-      fetchEvent();
-    }
+      }
+    };
+
+    checkAuthAndFetch();
   }, [id, isEditMode, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,16 +129,23 @@ export default function EventEditor() {
     try {
       let coverUrl = existingCoverUrl;
       
-      // Basic image upload handling to Supabase Storage
+      // Upload cover image to Supabase Storage bucket 'photos'
       if (coverImageFile) {
-        // Convert to base64 as a fallback if bucket doesn't exist, but standard is storage upload
-        // We'll use a data URL for simplicity in the mockup if storage isn't configured, 
-        // but normally we'd do supabase.storage.from('photos').upload(...)
-        const reader = new FileReader();
-        coverUrl = await new Promise((resolve) => {
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(coverImageFile);
-        });
+        const fileExt = coverImageFile.name.split('.').pop() || 'jpg';
+        const fileName = `covers/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const { error: uploadErr } = await supabase.storage.from('photos').upload(fileName, coverImageFile);
+        
+        if (uploadErr) {
+          console.warn("Storage upload failed, falling back to Base64 data URL", uploadErr);
+          const reader = new FileReader();
+          coverUrl = await new Promise((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(coverImageFile);
+          });
+        } else {
+          const { data: publicUrlData } = supabase.storage.from('photos').getPublicUrl(fileName);
+          coverUrl = publicUrlData.publicUrl;
+        }
       }
 
       const generatedSlug = isEditMode ? slug : name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
