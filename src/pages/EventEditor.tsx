@@ -29,9 +29,6 @@ export default function EventEditor() {
   const [photographers, setPhotographers] = useState<any[]>([]);
   const [inviteToken, setInviteToken] = useState<string>("");
   const [isInviteRevoked, setIsInviteRevoked] = useState<boolean>(false);
-  const [newPhotographerEmail, setNewPhotographerEmail] = useState("");
-  const [newPhotographerName, setNewPhotographerName] = useState("");
-  const [addingPhotographer, setAddingPhotographer] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [togglingInvite, setTogglingInvite] = useState(false);
 
@@ -90,7 +87,7 @@ export default function EventEditor() {
           setExistingCoverUrl(data.cover_image || "");
           setSlug(data.slug);
           
-          // Fetch linked photographers
+           // Fetch linked photographers
           const { data: photogList, error: pError } = await supabase
             .from('event_photographers')
             .select('*, users:photographer_id(name, email)')
@@ -103,6 +100,30 @@ export default function EventEditor() {
               email: p.users?.email
             }));
             setPhotographers(mapped);
+          }
+
+          // Fetch existing invitation token if any
+          const { data: tokenData, error: tError } = await supabase
+            .from('invitation_tokens')
+            .select('*')
+            .eq('event_id', data.id)
+            .maybeSingle();
+            
+          if (!tError && tokenData) {
+            setInviteToken(tokenData.token);
+            setIsInviteRevoked(tokenData.revoked || false);
+          } else {
+            // Auto-generate if not existing (so the organizer doesn't have to click a button to create one)
+            const firstToken = Math.random().toString(36).substring(2, 12);
+            const { data: newToken } = await supabase
+              .from('invitation_tokens')
+              .insert({ event_id: data.id, token: firstToken })
+              .select()
+              .maybeSingle() as any;
+            if (newToken) {
+              setInviteToken(newToken.token);
+              setIsInviteRevoked(false);
+            }
           }
         } catch (err: any) {
           setErrorMessage(err.message || "Erreur de chargement");
@@ -282,54 +303,45 @@ export default function EventEditor() {
     }
   };
 
-  const handleAddPhotographer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!eventId || !newPhotographerEmail) return;
-
-    setAddingPhotographer(true);
+  const handleRegenerateInviteLink = async () => {
+    if (!eventId) return;
+    setTogglingInvite(true);
     setErrorMessage(null);
-
     try {
-      const { data: user, error: userErr } = await supabase.from('users').select('*').eq('email', newPhotographerEmail).single();
-      
-      if (userErr || !user) {
-        throw new Error("Aucun compte trouvé avec cet email. Demandez-lui de s'inscrire d'abord.");
+      const newTokenStr = Math.random().toString(36).substring(2, 12);
+      const { data: existing } = await supabase
+        .from('invitation_tokens')
+        .select('*')
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('invitation_tokens')
+          .update({ token: newTokenStr, revoked: false })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        setInviteToken(data.token);
+        setIsInviteRevoked(false);
+        setSuccessMessage("Un nouveau lien et QR code d'invitation photographe ont été générés !");
+      } else {
+        const { data, error } = await supabase
+          .from('invitation_tokens')
+          .insert({ event_id: eventId, token: newTokenStr })
+          .select()
+          .single();
+        if (error) throw error;
+        setInviteToken(data.token);
+        setIsInviteRevoked(false);
+        setSuccessMessage("Lien d'invitation photographe activé !");
       }
-
-      const { data, error } = await supabase.from('event_photographers').insert({
-        event_id: eventId,
-        photographer_id: user.id
-      }).select('*, users:photographer_id(name, email)').single();
-
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error("Ce photographe est déjà rattaché à l'événement.");
-        }
-        throw new Error("Une erreur est survenue lors de l'ajout.");
-      }
-
-      const mappedData = {
-        ...data,
-        name: data.users?.name,
-        email: data.users?.email
-      };
-
-      setPhotographers((prev) => {
-        const index = prev.findIndex((p) => p.photographer_id === mappedData.photographer_id);
-        if (index !== -1) {
-          return prev.map((p) => p.photographer_id === mappedData.photographer_id ? mappedData : p);
-        }
-        return [...prev, mappedData];
-      });
-
-      setNewPhotographerEmail("");
-      setNewPhotographerName("");
-      setSuccessMessage(`Photographe rattaché avec succès à l'événement live.`);
-      setTimeout(() => setSuccessMessage(null), 4000);
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      setErrorMessage(err.message);
+      setErrorMessage("Erreur lors de la régénération du lien : " + err.message);
     } finally {
-      setAddingPhotographer(false);
+      setTogglingInvite(false);
     }
   };
 
@@ -562,113 +574,68 @@ export default function EventEditor() {
               👤 Gestion des Membres & Accès Photographes
             </h2>
             <p className="text-xs text-neutral-500 mt-1">
-              Pilotez l'équipe de prise de vue. Invitez des photographes professionnels via un lien ou ajoutez-les directement par email pour qu'ils puissent uploader en direct.
+              Pilotez l'équipe de prise de vue. Partagez le lien ou le QR code spécial ci-dessous avec vos photographes pour qu'ils puissent s'associer et uploader en direct.
             </p>
           </div>
 
           <div className="grid md:grid-cols-5 gap-8">
-            {/* Column A: Link and Add Members Form */}
+            {/* Column A: Photographer Invitation via QR Code */}
             <div className="md:col-span-3 space-y-6">
-              {/* Add Member Direct Form */}
-              <div className="bg-white border border-neutral-200 p-6 space-y-4">
-                <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
-                  Ajouter directement un photographe
-                </span>
-                
-                <form onSubmit={handleAddPhotographer} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">
-                      Adresse Email du photographe
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={newPhotographerEmail}
-                      onChange={(e) => setNewPhotographerEmail(e.target.value)}
-                      placeholder="ex: photographe@exemple.com"
-                      className="w-full text-xs bg-neutral-50 border border-neutral-200 outline-none focus:border-black rounded-none p-3"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">
-                      Nom complet (Optionnel)
-                    </label>
-                    <input
-                      type="text"
-                      value={newPhotographerName}
-                      onChange={(e) => setNewPhotographerName(e.target.value)}
-                      placeholder="ex: Pierre Daumier"
-                      className="w-full text-xs bg-neutral-50 border border-neutral-200 outline-none focus:border-black rounded-none p-3"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={addingPhotographer || !newPhotographerEmail}
-                    className="w-full bg-black text-white hover:bg-neutral-800 transition-colors py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer"
-                  >
-                    {addingPhotographer ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <UserPlus size={13} />
-                    )}
-                    <span>Ajouter à la galerie</span>
-                  </button>
-                </form>
-              </div>
-
-              {/* Unique Invitation Link Widget */}
-              {inviteToken && (
-                <div className="bg-neutral-50 border border-neutral-200 p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
-                        Lien d'invitation générique
-                      </span>
-                      <p className="text-xs text-neutral-500 font-sans mt-0.5">
-                        Permet aux photographes de s'associer eux-mêmes à l'événement.
-                      </p>
-                    </div>
-                    <div>
-                      <span className={`inline-block text-[9px] font-mono px-2 py-0.5 uppercase tracking-widest ${isInviteRevoked ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-black text-white'}`}>
+              {inviteToken ? (
+                <div className="space-y-4">
+                  <QRCodeDisplay
+                    type="photographer"
+                    url={isInviteRevoked ? "" : getPhotographerInviteUrl()}
+                    eventName={`${name}`}
+                    slug={`${slug}-photographe`}
+                    disabled={isInviteRevoked}
+                  />
+                  <div className="bg-neutral-50 border border-neutral-200 p-6 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block">
+                          Statut de l'invitation
+                        </span>
+                        <p className="text-xs text-neutral-550 font-sans mt-0.5">
+                          {isInviteRevoked 
+                            ? "Le lien et le QR code sont désactivés. Personne ne peut s'associer." 
+                            : "Le lien et le QR code sont actifs. Les photographes peuvent s'associer."}
+                        </p>
+                      </div>
+                      <span className={`inline-block text-[9px] font-mono px-2.5 py-1 uppercase tracking-widest text-center shrink-0 border ${
+                        isInviteRevoked 
+                          ? "bg-red-55 border-red-200 text-red-700" 
+                          : "bg-black text-white border-black"
+                      }`}>
                         {isInviteRevoked ? "DÉSACTIVÉ" : "ACTIF"}
                       </span>
                     </div>
-                  </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={isInviteRevoked ? "Lien temporairement désactivé" : getPhotographerInviteUrl()}
-                      className="flex-1 text-xs font-mono bg-white px-3 py-2.5 border border-neutral-200 outline-none select-all text-neutral-600 truncate"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyInviteToken}
-                      disabled={isInviteRevoked}
-                      className="bg-white text-black border border-neutral-200 hover:border-black px-3 py-2.5 text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer disabled:opacity-50"
-                      title="Copier le lien photographe"
-                    >
-                      {copiedToken ? <Check size={14} className="text-black" /> : <Copy size={14} />}
-                      <span>{copiedToken ? "Copié !" : "Copier"}</span>
-                    </button>
-                  </div>
+                    <div className="pt-4 border-t border-neutral-200 flex flex-wrap gap-4 items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={handleToggleInviteLink}
+                        disabled={togglingInvite}
+                        className="flex items-center space-x-2 text-xs font-mono font-bold uppercase tracking-wider text-black border-b border-black hover:text-neutral-500 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {togglingInvite ? "Traitement..." : isInviteRevoked ? "Réactiver le lien" : "Désactiver le lien"}
+                      </button>
 
-                  <div className="pt-2 border-t border-neutral-200 flex justify-between items-center">
-                    <p className="text-[10px] font-mono text-neutral-400 max-w-[200px] leading-relaxed uppercase">
-                      Chaque jeton de transmission est unique et révocable.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleToggleInviteLink}
-                      disabled={togglingInvite}
-                      className="text-xs font-mono font-bold uppercase tracking-wider text-black border-b border-black hover:text-neutral-500 cursor-pointer"
-                    >
-                      {togglingInvite ? "Chargement..." : isInviteRevoked ? "Réactiver le lien" : "Révoquer/Désactiver le lien"}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleRegenerateInviteLink}
+                        disabled={togglingInvite}
+                        className="flex items-center space-x-2 text-xs font-mono font-bold uppercase tracking-wider text-black border-b border-black hover:text-neutral-500 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        Générer un autre lien / QR Code
+                      </button>
+                    </div>
                   </div>
+                </div>
+              ) : (
+                <div className="border border-dashed border-neutral-300 p-8 text-center text-neutral-400 bg-white flex flex-col items-center justify-center min-h-[250px]">
+                  <Loader2 className="animate-spin text-neutral-300 mb-2" size={20} />
+                  <p className="text-xs font-semibold uppercase text-black">Initialisation de l'accès photographe...</p>
                 </div>
               )}
             </div>
@@ -681,7 +648,7 @@ export default function EventEditor() {
 
               {photographers.length === 0 ? (
                 <div className="border border-dashed border-neutral-300 p-8 text-center text-neutral-400 bg-white font-sans text-xs">
-                  Aucun photographe rattaché pour le moment. Utilisez le lien ou ajoutez-les par email.
+                  Aucun photographe rattaché pour le moment. Partagez le QR code d'accès ou le lien d'invitation.
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
