@@ -205,7 +205,7 @@ export default function Home() {
                     src={evt.cover_image}
                     alt={evt.name}
                     referrerPolicy="no-referrer"
-                    className="absolute inset-0 w-full h-full object-cover grayscale opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-500"
+                    className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-500"
                   />
                   {/* Subtle vignette */}
                   <div className="absolute inset-0 bg-linear-to-tr from-black/80 via-black/20 to-transparent pointer-events-none" />

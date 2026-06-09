@@ -29,7 +29,7 @@ export default function PhotoCard({ photo, onClick, onDelete, canDelete = false 
         alt={`Photo par ${photo.uploaded_by_name}`}
         referrerPolicy="no-referrer"
         onClick={onClick}
-        className="w-full h-full object-cover transition-all duration-700 ease-out grayscale group-hover:grayscale-0 group-hover:brightness-105"
+        className="w-full h-full object-cover transition-all duration-700 ease-out group-hover:brightness-105"
         loading="lazy"
       />
 

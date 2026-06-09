@@ -199,7 +199,7 @@ export default function Dashboard() {
                         src={event.cover_image}
                         alt="Couverture"
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-opacity"
+                        className="w-full h-full object-cover transition-opacity"
                       />
                     </div>
                   </div>

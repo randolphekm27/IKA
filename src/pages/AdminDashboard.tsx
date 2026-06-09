@@ -257,7 +257,7 @@ export default function AdminDashboard() {
                       src={e.cover_image}
                       alt=""
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover grayscale"
+                      className="w-full h-full object-cover"
                     />
                   </div>
                 </div>

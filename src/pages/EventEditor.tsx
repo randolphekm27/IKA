@@ -480,7 +480,7 @@ export default function EventEditor() {
                       src={coverImageFile ? URL.createObjectURL(coverImageFile) : existingCoverUrl}
                       alt="Aperçu couverture"
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover grayscale"
+                      className="w-full h-full object-cover"
                     />
                   </div>
                 )}

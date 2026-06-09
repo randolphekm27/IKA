@@ -273,7 +273,7 @@ export default function PhotographerDesk() {
                       src={photo.image_url}
                       alt=""
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover grayscale"
+                      className="w-full h-full object-cover"
                     />
                   </div>
 

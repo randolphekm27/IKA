@@ -112,7 +112,7 @@ export default function PhotographerDashboard() {
                     src={e.cover_image}
                     alt={e.name}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-350 transform group-hover:scale-102"
+                    className="w-full h-full object-cover transition-all duration-350 transform group-hover:scale-102"
                   />
                   <div className="absolute top-3 right-3 bg-black text-white text-[9px] font-mono px-2 py-1 uppercase tracking-widest">
                     {(e as any).photo_count || 0} CLICHÉS LIVE
