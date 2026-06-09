@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { User } from "../types";
 import { UserCircle, LogOut, Menu, X, Shield, Camera, LayoutDashboard } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -34,7 +35,8 @@ export default function Navbar() {
     };
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem("ika_user");
     localStorage.removeItem("ika_token");
     setUser(null);

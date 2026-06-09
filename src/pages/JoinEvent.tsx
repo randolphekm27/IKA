@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Camera, Calendar, MapPin, CheckCircle, AlertTriangle, Loader2, ArrowRight, LogIn, UserPlus } from "lucide-react";
 import { User } from "../types";
+import { supabase } from "../lib/supabase";
 
 export default function JoinEvent() {
   const { token } = useParams<{ token: string }>();
@@ -35,23 +36,27 @@ export default function JoinEvent() {
     }
 
     // Fetch invitation details
-    fetch(`/api/invitations/${token}`)
-      .then((res) => {
-        if (!res.ok) {
-          return res.json().then((json) => {
-            throw new Error(json.error || "Lien d'invitation invalide ou révoqué.");
-          });
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setInvitation(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setErrorMsg(err.message);
-        setLoading(false);
-      });
+    const fetchInvite = async () => {
+      const { data, error } = await supabase
+        .from('invitation_tokens')
+        .select('*, events(id, name, location)')
+        .eq('token', token)
+        .eq('revoked', false)
+        .single();
+        
+      if (error || !data) {
+        setErrorMsg("Lien d'invitation invalide ou révoqué.");
+      } else {
+        setInvitation({
+          token: data.token,
+          event_id: data.events.id,
+          event_name: data.events.name,
+          location: data.events.location
+        });
+      }
+      setLoading(false);
+    };
+    fetchInvite();
   }, [token]);
 
   const handleJoin = async () => {
@@ -64,18 +69,17 @@ export default function JoinEvent() {
 
     setJoining(true);
     try {
-      const res = await fetch(`/api/events/${invitation.event_id}/photographers/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photographer_id: currentUser.id,
-          token: token,
-        }),
+      const { error } = await supabase.from('event_photographers').insert({
+        event_id: invitation.event_id,
+        photographer_id: currentUser.id
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Échec de l'assignation.");
+      if (error) {
+        if (error.code === '23505') {
+          // Unique violation
+        } else {
+          throw new Error("Échec de l'assignation.");
+        }
       }
 
       setSuccess(true);

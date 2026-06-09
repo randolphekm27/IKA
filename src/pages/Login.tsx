@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LogIn, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
-import { User } from "../types";
+import { supabase } from "../lib/supabase";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -9,21 +9,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"organisateur" | "photographe" | "admin">("organisateur");
-
-  const handleSelectRole = (role: "organisateur" | "photographe" | "admin") => {
-    setSelectedRole(role);
-    if (role === "organisateur") {
-      setEmail("jean@ika.fr");
-      setPassword("password123");
-    } else if (role === "photographe") {
-      setEmail("marc@ika.fr");
-      setPassword("password123");
-    } else {
-      setEmail("admin@ika.fr");
-      setPassword("password123");
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,26 +21,38 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const data = await response.json();
+      if (authError) {
+        throw new Error(authError.message || "Identifiants invalides");
+      }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Identifiants invalides");
+      if (!authData.user) {
+        throw new Error("Erreur inattendue");
+      }
+
+      // Fetch user profile
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError || !userProfile) {
+        throw new Error("Profil utilisateur introuvable.");
       }
 
       // Save user session
-      localStorage.setItem("ika_user", JSON.stringify(data.user));
-      localStorage.setItem("ika_token", data.token);
+      localStorage.setItem("ika_user", JSON.stringify(userProfile));
+      localStorage.setItem("ika_token", authData.session?.access_token || "");
 
       // Trigger custom storage event for Navbar update
       window.dispatchEvent(new Event("storage"));
 
-      // 1. Check if we have a delayed redirection token acceptance loop
+      // Check if we have a delayed redirection token acceptance loop
       const delayedJoinPath = sessionStorage.getItem("ika_redirect_join");
       if (delayedJoinPath) {
         sessionStorage.removeItem("ika_redirect_join");
@@ -64,11 +61,11 @@ export default function Login() {
       }
 
       // Redirect depending on user role
-      if (data.user.role === "admin") {
+      if (userProfile.role === "admin") {
         navigate("/admin");
-      } else if (data.user.role === "organisateur") {
+      } else if (userProfile.role === "organisateur") {
         navigate("/dashboard");
-      } else if (data.user.role === "photographe") {
+      } else if (userProfile.role === "photographe") {
         navigate("/photographe");
       } else {
         navigate("/");
@@ -93,43 +90,6 @@ export default function Login() {
           <div className="w-12 h-0.5 bg-black mx-auto mt-2"></div>
         </div>
 
-        {/* Tailored Espace Switcher Tabs */}
-        <div className="grid grid-cols-3 border border-neutral-200 text-center">
-          <button
-            type="button"
-            onClick={() => handleSelectRole("organisateur")}
-            className={`py-2.5 text-[10px] font-mono tracking-wider uppercase transition-colors font-bold cursor-pointer ${
-              selectedRole === "organisateur"
-                ? "bg-black text-white"
-                : "bg-white text-neutral-400 hover:text-black"
-            }`}
-          >
-            Organisateur
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSelectRole("photographe")}
-            className={`py-2.5 text-[10px] font-mono tracking-wider uppercase transition-colors font-bold border-x border-neutral-200 cursor-pointer ${
-              selectedRole === "photographe"
-                ? "bg-black text-white"
-                : "bg-white text-neutral-400 hover:text-black"
-            }`}
-          >
-            Photographe
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSelectRole("admin")}
-            className={`py-2.5 text-[10px] font-mono tracking-wider uppercase transition-colors font-bold cursor-pointer ${
-              selectedRole === "admin"
-                ? "bg-black text-white"
-                : "bg-white text-neutral-400 hover:text-black"
-            }`}
-          >
-            Admin
-          </button>
-        </div>
-
         {error && (
           <div className="bg-neutral-50 border border-black p-4 flex items-start space-x-2 text-black">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -137,10 +97,10 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-1.5 align-left text-left">
             <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">
-              Adresse Email (ex: {selectedRole === "organisateur" ? "jean@ika.fr" : selectedRole === "photographe" ? "marc@ika.fr" : "admin@ika.fr"})
+              Adresse Email
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-neutral-400 pointer-events-none">
@@ -161,7 +121,7 @@ export default function Login() {
           <div className="space-y-1.5 align-left text-left">
             <div className="flex justify-between items-center">
               <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">
-                Mot de passe (facultatif d'essai)
+                Mot de passe
               </label>
             </div>
             <div className="relative">
@@ -183,7 +143,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white hover:bg-neutral-800 transition-colors py-3.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full bg-black text-white hover:bg-neutral-800 transition-colors py-3.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer mt-6"
           >
             {loading ? (
               <>
@@ -211,15 +171,6 @@ export default function Login() {
               Mot de passe oublié ?
             </Link>
           </div>
-        </div>
-
-        {/* Demo instructions */}
-        <div className="border border-neutral-100 bg-neutral-50 p-4 text-[11px] font-mono text-neutral-400 leading-relaxed text-left space-y-2">
-          <p className="font-bold text-black uppercase tracking-wider">💡 Guide Rapide de Test :</p>
-          <p>
-            Cliquez sur un rôle ci-dessus pour pré-configurer automatiquement les indentifiants d'essais correspondants. 
-            N'importe quel mot de passe d'au moins 1 caractère sera accepté !
-          </p>
         </div>
       </div>
     </div>

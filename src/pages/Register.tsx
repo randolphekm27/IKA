@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserPlus, Mail, Lock, User as UserIcon, ShieldAlert, Loader2, CheckCircle } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -35,25 +36,42 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role }),
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            role,
+          }
+        }
       });
 
-      const data = await response.json();
+      if (authError) {
+        throw new Error(authError.message || "Erreur lors de l'enregistrement");
+      }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Erreur lors de l'enregistrement");
+      if (authData.user) {
+        // Manually insert into public.users in case the DB trigger isn't available
+        const { error: insertError } = await supabase.from('users').insert({
+          id: authData.user.id,
+          name: name,
+          email: email,
+          role: role
+        });
+        
+        if (insertError) {
+          console.warn("Failed to insert user profile. They might already exist or RLS blocked it.", insertError);
+        }
       }
 
       setSuccess(true);
       
       // Auto login in memory
       setTimeout(() => {
-        // Redirect to login page or log them in automatically
-        localStorage.setItem("ika_user", JSON.stringify(data.user));
-        localStorage.setItem("ika_token", data.token);
+        const userProfile = { id: authData.user?.id, name, email, role, status: 'active' };
+        localStorage.setItem("ika_user", JSON.stringify(userProfile));
+        localStorage.setItem("ika_token", authData.session?.access_token || "");
         window.dispatchEvent(new Event("storage"));
         
         // Check if we have a delayed redirection token acceptance loop
@@ -64,14 +82,14 @@ export default function Register() {
           return;
         }
 
-        if (data.user.role === "organisateur") {
+        if (role === "organisateur") {
           navigate("/dashboard");
-        } else if (data.user.role === "photographe") {
+        } else if (role === "photographe") {
           navigate("/photographe");
         } else {
           navigate("/");
         }
-      }, 2500);
+      }, 2000);
 
     } catch (err: any) {
       setError(err.message || "Impossible de compléter l'inscription.");
@@ -101,7 +119,7 @@ export default function Register() {
             <div className="space-y-1">
               <h3 className="text-sm font-bold text-black uppercase">Inscription Réussie !</h3>
               <p className="text-[11px] font-mono text-neutral-500">
-                [Supabase Auth] Courriel d'activation simulé envoyé à {email}.
+                Votre compte a été créé avec succès.
               </p>
               <p className="text-xs text-neutral-600 font-sans pt-1">
                 Redirection automatique vers votre espace...

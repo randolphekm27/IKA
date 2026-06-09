@@ -1,0 +1,131 @@
+{
+  "users": [
+    {
+      "id": "user-admin-123",
+      "name": "Admin IKA",
+      "email": "admin@ika.fr",
+      "password": "password123",
+      "role": "admin",
+      "status": "active",
+      "created_at": "2026-06-09T06:54:10.452Z"
+    },
+    {
+      "id": "user-org-abc",
+      "name": "Jean l'Organisateur",
+      "email": "jean@ika.fr",
+      "password": "password123",
+      "role": "organisateur",
+      "status": "active",
+      "created_at": "2026-06-09T06:54:10.452Z"
+    },
+    {
+      "id": "user-pho-xyz",
+      "name": "Marc le Photographe",
+      "email": "marc@ika.fr",
+      "password": "password123",
+      "role": "photographe",
+      "status": "active",
+      "created_at": "2026-06-09T06:54:10.452Z"
+    }
+  ],
+  "events": [
+    {
+      "id": "event-1",
+      "name": "Festival de Jazz de Nice",
+      "slug": "festival-jazz-nice-a8b2c4",
+      "description": "Le festival mythique sous le soleil de la Côte d'Azur. Retrouvez tous les moments forts en direct.",
+      "location": "Nice, Promenade des Anglais",
+      "cover_image": "https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=800&auto=format&fit=crop&q=80",
+      "status": "active",
+      "created_by": "user-org-abc",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "date": "2026-07-15"
+    },
+    {
+      "id": "event-2",
+      "name": "Défilé de Mode Automne 2026",
+      "slug": "defile-mode-automne-2026-z9y8x7",
+      "description": "Découvrez la nouvelle collection de haute couture capturée en continu par nos photographes officiels.",
+      "location": "Paris, Palais de Tokyo",
+      "cover_image": "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&auto=format&fit=crop&q=80",
+      "status": "active",
+      "created_by": "user-org-abc",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "event-3",
+      "name": "Mariage de Sophie & Antoine",
+      "slug": "mariage-sophie-antoine-m5n4b3",
+      "description": "Notre plus beau jour partagé en direct avec vous tous. Flashez le QR Code pour uploader vos pépites !",
+      "location": "Château de Bellevue, Touraine",
+      "cover_image": "https://images.unsplash.com/photo-1519741497674-611481863552?w=800&auto=format&fit=crop&q=80",
+      "status": "active",
+      "created_by": "user-admin-123",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "date": "2026-06-20"
+    }
+  ],
+  "photos": [
+    {
+      "id": "photo-1",
+      "event_id": "event-1",
+      "image_url": "https://images.unsplash.com/photo-1415201375330-81104af7f5e5?w=1200&auto=format&fit=crop&q=80",
+      "uploaded_by": "user-pho-xyz",
+      "uploaded_by_name": "Marc le Photographe",
+      "created_at": "2026-06-09T03:54:10.452Z",
+      "download_count": 12
+    },
+    {
+      "id": "photo-2",
+      "event_id": "event-1",
+      "image_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&auto=format&fit=crop&q=80",
+      "uploaded_by": "user-pho-xyz",
+      "uploaded_by_name": "Marc le Photographe",
+      "created_at": "2026-06-09T04:54:10.452Z",
+      "download_count": 24
+    },
+    {
+      "id": "photo-3",
+      "event_id": "event-2",
+      "image_url": "https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?w=1200&auto=format&fit=crop&q=80",
+      "uploaded_by": "user-admin-123",
+      "uploaded_by_name": "Admin IKA",
+      "created_at": "2026-06-09T05:54:10.452Z",
+      "download_count": 8
+    }
+  ],
+  "event_photographers": [
+    {
+      "event_id": "event-1",
+      "photographer_id": "user-pho-xyz",
+      "joined_at": "2026-06-09T06:54:10.452Z",
+      "revoked": false
+    }
+  ],
+  "invitation_tokens": [
+    {
+      "id": "token-1",
+      "token": "mockphototoken32characterevent1",
+      "event_id": "event-1",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "revoked": false
+    },
+    {
+      "id": "token-2",
+      "token": "mockphototoken32characterevent2",
+      "event_id": "event-2",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "revoked": false
+    },
+    {
+      "id": "token-3",
+      "token": "mockphototoken32characterevent3",
+      "event_id": "event-3",
+      "created_at": "2026-06-09T06:54:10.452Z",
+      "revoked": false
+    }
+  ],
+  "visits": [],
+  "reset_tokens": []
+}

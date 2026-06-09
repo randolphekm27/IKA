@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, CheckCircle, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -16,14 +17,12 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
 
-      if (!res.ok) {
-        throw new Error("Impossible de traiter la demande.");
+      if (error) {
+        throw new Error(error.message || "Impossible de traiter la demande.");
       }
 
       setSuccess(true);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Camera, MapPin, Calendar, Image as ImageIcon, Loader2, ArrowRight } from "lucide-react";
 import { User, Event } from "../types";
+import { supabase } from "../lib/supabase";
 
 export default function PhotographerDashboard() {
   const navigate = useNavigate();
@@ -25,16 +26,25 @@ export default function PhotographerDashboard() {
       setCurrentUser(userObj);
 
       // Fetch assigned events list
-      fetch(`/api/photographe/${userObj.id}/events`)
-        .then((res) => res.json())
-        .then((data) => {
-          setEvents(data);
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error("Failed to load assigned events", err);
-          setLoading(false);
-        });
+      const fetchAssigned = async () => {
+        const { data, error } = await supabase
+          .from('event_photographers')
+          .select('events(*, photos(count))')
+          .eq('photographer_id', userObj.id)
+          .eq('revoked', false);
+
+        if (error) {
+          console.error("Failed to load assigned events", error);
+        } else {
+          const mappedEvents = data?.map((item: any) => ({
+            ...item.events,
+            photo_count: item.events?.photos?.[0]?.count || 0
+          })) || [];
+          setEvents(mappedEvents);
+        }
+        setLoading(false);
+      };
+      fetchAssigned();
     } catch {
       navigate("/login");
     }

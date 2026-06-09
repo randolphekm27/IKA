@@ -2,25 +2,29 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, ArrowUpRight, Camera, HelpCircle, Activity } from "lucide-react";
 import { Event } from "../types";
+import { supabase } from "../lib/supabase";
 
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/events")
-      .then((res) => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data) => {
-        setEvents(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to load events", err);
-        setLoading(false);
-      });
+    const fetchEvents = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*, photos(count)')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(4);
+        
+      if (error) {
+        console.error("Failed to load events", error);
+      } else {
+        setEvents(data || []);
+      }
+      setLoading(false);
+    };
+    fetchEvents();
   }, []);
 
   const topEventName = events.length > 0 ? events[0].name : "DÉMO LIVE 2026";
@@ -55,7 +59,7 @@ export default function Home() {
           {/* QR & CTA Segment */}
           <div className="pt-4 flex flex-col sm:flex-row items-start sm:items-center gap-8">
             {/* Visual Artistic QR Block */}
-            <div className="flex-shrink-0 w-28 h-28 border-8 border-black p-1.5 bg-white grid grid-cols-4 gap-1 select-none">
+            <div className="shrink-0 w-28 h-28 border-8 border-black p-1.5 bg-white grid grid-cols-4 gap-1 select-none">
               <div className="bg-black"></div><div className="bg-black"></div><div></div><div className="bg-black"></div>
               <div></div><div className="bg-black"></div><div className="bg-black"></div><div></div>
               <div className="bg-black"></div><div></div><div className="bg-black"></div><div className="bg-black"></div>
@@ -131,33 +135,33 @@ export default function Home() {
           {loading ? (
             <div className="grid grid-cols-2 gap-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="aspect-square bg-neutral-900 border border-neutral-800 animate-pulse"></div>
+                <div key={i} className="aspect-square bg-neutral-900 border border-neutral-900 animate-pulse"></div>
               ))}
             </div>
           ) : events.length === 0 ? (
             /* Mock placeholder cells matching aesthetic perfectly when zero real events exist */
             <div className="grid grid-cols-2 gap-3">
-              <div className="relative aspect-square bg-[#1A1A1A] p-2 flex flex-col justify-end border border-neutral-900">
-                <div className="w-full h-full absolute inset-0 bg-gradient-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
-                <div className="relative z-20 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
+              <div className="relative aspect-1/2 md:aspect-4/5 bg-[#111] overflow-hidden group flex flex-col justify-end border border-neutral-900">
+                <div className="w-full h-full absolute inset-0 bg-linear-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
+                <div className="relative z-20 p-4 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
                   IMG_4402 &bull; DEGRADE
                 </div>
               </div>
-              <div className="relative aspect-square bg-[#222222] p-2 flex flex-col justify-end border border-neutral-900">
-                <div className="w-full h-full absolute inset-0 bg-gradient-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
-                <div className="relative z-20 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block font-semibold">
+              <div className="relative aspect-1/2 md:aspect-4/5 bg-[#111] overflow-hidden group flex flex-col justify-end border border-neutral-900">
+                <div className="w-full h-full absolute inset-0 bg-linear-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
+                <div className="relative z-20 p-4 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
                   MOCKUP_STUDIO
                 </div>
               </div>
-              <div className="relative aspect-square bg-[#111111] p-2 flex flex-col justify-end border border-neutral-900">
-                <div className="w-full h-full absolute inset-0 bg-gradient-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
-                <div className="relative z-20 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
+              <div className="relative aspect-1/2 md:aspect-4/5 bg-[#111] overflow-hidden group flex flex-col justify-end border border-neutral-900">
+                <div className="w-full h-full absolute inset-0 bg-linear-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
+                <div className="relative z-20 p-4 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
                   CAPILLARY_SHOT
                 </div>
               </div>
-              <div className="relative aspect-square bg-[#2A2A2A] p-2 flex flex-col justify-end border border-neutral-900">
-                <div className="w-full h-full absolute inset-0 bg-gradient-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
-                <div className="relative z-20 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
+              <div className="relative aspect-1/2 md:aspect-4/5 bg-[#111] overflow-hidden group flex flex-col justify-end border border-neutral-900">
+                <div className="w-full h-full absolute inset-0 bg-linear-to-tr from-neutral-950 to-transparent opacity-80 z-10" />
+                <div className="relative z-20 p-4 text-[9px] font-mono text-neutral-400 uppercase tracking-wider block">
                   OFFICIEL_PLATEAU
                 </div>
               </div>
@@ -169,7 +173,7 @@ export default function Home() {
                 <Link
                   key={evt.id}
                   to={`/galerie/${evt.slug}`}
-                  className={`group relative ${idx === 0 ? "row-span-2 aspect-[1/2] md:aspect-auto" : "aspect-square"} bg-neutral-900 overflow-hidden border border-neutral-800 flex flex-col justify-between`}
+                  className={`group relative ${idx === 0 ? "row-span-2 aspect-1/2 md:aspect-auto" : "aspect-square"} bg-neutral-900 overflow-hidden border border-neutral-800 flex flex-col justify-between`}
                 >
                   <img
                     src={evt.cover_image}
@@ -178,7 +182,7 @@ export default function Home() {
                     className="absolute inset-0 w-full h-full object-cover grayscale opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-500"
                   />
                   {/* Subtle vignette */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30 pointer-events-none" />
+                  <div className="absolute inset-0 bg-linear-to-tr from-black/80 via-black/20 to-transparent pointer-events-none" />
 
                   {/* Top Badge */}
                   <div className="relative z-10 p-3 flex justify-between items-start">

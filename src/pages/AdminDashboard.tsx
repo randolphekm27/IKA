@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Users, Calendar, Shield, Trash2, ArrowUpRight, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { User, Event } from "../types";
+import { supabase } from "../lib/supabase";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -33,22 +34,22 @@ export default function AdminDashboard() {
 
       // 2. Fetch all system directory data
       Promise.all([
-        fetch("/api/admin/users").then((r) => {
-          if (!r.ok) {
-            return r.json().then((d) => { throw new Error(d.error || `Erreur serveur HTTP ${r.status}`); });
-          }
-          return r.json();
-        }),
-        fetch("/api/events").then((r) => {
-          if (!r.ok) {
-            return r.json().then((d) => { throw new Error(d.error || `Erreur serveur HTTP ${r.status}`); });
-          }
-          return r.json();
-        }),
+        supabase.from('users').select('*').order('created_at', { ascending: false }),
+        supabase.from('events').select('*, photos(count), visits(count)').order('created_at', { ascending: false }),
       ])
-        .then(([usersList, eventsList]) => {
-          setUsers(usersList);
-          setEvents(eventsList);
+        .then(([usersRes, eventsRes]) => {
+          if (usersRes.error) throw usersRes.error;
+          if (eventsRes.error) throw eventsRes.error;
+          
+          setUsers(usersRes.data || []);
+          
+          const formattedEvents = eventsRes.data?.map((e: any) => ({
+            ...e,
+            photo_count: e.photos?.[0]?.count || 0,
+            visit_count: e.visits?.[0]?.count || 0
+          })) || [];
+          setEvents(formattedEvents);
+          
           setLoading(false);
         })
         .catch((err) => {
@@ -67,16 +68,15 @@ export default function AdminDashboard() {
     setSuccessMessage(null);
 
     try {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: newRole }),
-      });
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId)
+        .select()
+        .single();
 
-      const updatedUser = await res.json();
-
-      if (!res.ok) {
-        throw new Error(updatedUser.error || "Échec changement de rôle");
+      if (error) {
+        throw new Error(error.message || "Échec changement de rôle");
       }
 
       // Update state
@@ -100,11 +100,12 @@ export default function AdminDashboard() {
     if (!confirm("Voulez-vous supprimer définitivement cet événement en tant qu'administrateur ?")) return;
 
     try {
-      const res = await fetch(`/api/events/${eventId}`, {
-        method: "DELETE",
-      });
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
 
-      if (!res.ok) {
+      if (error) {
         throw new Error("Échec suppression.");
       }
 
@@ -239,7 +240,7 @@ export default function AdminDashboard() {
                       SLUG: <span className="text-neutral-600 font-bold select-all">{e.slug}</span>
                     </p>
                   </div>
-                  <div className="w-10 h-10 bg-neutral-100 border border-neutral-200 flex-shrink-0">
+                  <div className="w-12 h-12 bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0">
                     <img
                       src={e.cover_image}
                       alt=""

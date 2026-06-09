@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Upload, Image as ImageIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import imageCompression from "browser-image-compression";
+import { supabase } from "../lib/supabase";
 
 interface UploadZoneProps {
   eventId: string;
@@ -73,27 +74,38 @@ export default function UploadZone({ eventId, onUploadSuccess, uploadedBy, uploa
           `Upload en cours d'envoi (${i + 1}/${totalFiles}): ${compressedSizeMb}MB (Optimisé de ${sizeDiffPercentage}%)`
         );
 
-        // 2. Upload to local API endpoint /api/events/:id/photos
-        const formData = new FormData();
-        formData.append("photo", compressedFile);
-        if (uploadedBy) {
-          formData.append("uploaded_by", uploadedBy);
-        }
-        if (uploadedByName) {
-          formData.append("uploaded_by_name", uploadedByName);
-        }
-
-        const response = await fetch(`/api/events/${eventId}/photos`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Erreur de serveur");
+        let imageUrl = "";
+        
+        // Try uploading to Supabase storage bucket "photos"
+        const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+        const { error: uploadErr } = await supabase.storage.from('photos').upload(fileName, compressedFile);
+        
+        if (uploadErr) {
+          console.warn("Storage upload failed, falling back to Base64 data URL", uploadErr);
+          const reader = new FileReader();
+          imageUrl = await new Promise<string>((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(compressedFile);
+          });
+        } else {
+          const { data: publicUrlData } = supabase.storage.from('photos').getPublicUrl(fileName);
+          imageUrl = publicUrlData.publicUrl;
         }
 
-        const newPhoto = await response.json();
+        const newPhotoData = {
+          event_id: eventId,
+          image_url: imageUrl,
+          uploaded_by: uploadedBy || null,
+          uploaded_by_name: uploadedByName || 'Invité',
+          download_count: 0
+        };
+
+        const { data: newPhoto, error } = await supabase.from('photos').insert(newPhotoData).select().single();
+
+        if (error) {
+          throw new Error("Erreur d'insertion dans la base de données");
+        }
+
         onUploadSuccess(newPhoto);
         successCount++;
       } catch (err: any) {

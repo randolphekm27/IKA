@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Eye, Image, Download, Calendar, MapPin, Loader2, ArrowUpRight, LogIn } from "lucide-react";
 import { Event, User, GlobalStats } from "../types";
 import StatCard from "../components/StatCard";
+import { supabase } from "../lib/supabase";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -28,24 +29,32 @@ export default function Dashboard() {
       }
       setCurrentUser(user);
 
-      // 2. Load data
       Promise.all([
-        fetch(`/api/events?created_by=${user.id}`).then((r) => {
-          if (!r.ok) {
-            return r.json().then((d) => { throw new Error(d.error || `Erreur serveur HTTP ${r.status}`); });
-          }
-          return r.json();
-        }),
-        fetch(`/api/stats/global?created_by=${user.id}`).then((r) => {
-          if (!r.ok) {
-            return r.json().then((d) => { throw new Error(d.error || `Erreur serveur HTTP ${r.status}`); });
-          }
-          return r.json();
-        }),
+        supabase
+          .from('events')
+          .select('*, photos(count), visits(count)')
+          .eq('created_by', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('photos')
+          .select('download_count, events!inner(created_by)')
+          .eq('events.created_by', user.id)
       ])
-        .then(([eventsData, statsData]) => {
-          setEvents(eventsData);
-          setStats(statsData);
+        .then(([eventsRes, photosRes]) => {
+          if (eventsRes.error) throw eventsRes.error;
+          
+          const formattedEvents = eventsRes.data?.map((e: any) => ({
+            ...e,
+            photo_count: e.photos?.[0]?.count || 0,
+            visit_count: e.visits?.[0]?.count || 0
+          })) || [];
+          setEvents(formattedEvents);
+
+          const totalEvents = formattedEvents.length;
+          const totalPhotos = photosRes.data?.length || 0;
+          const totalDownloads = photosRes.data?.reduce((acc: number, p: any) => acc + (p.download_count || 0), 0) || 0;
+          
+          setStats({ totalEvents, totalPhotos, totalDownloads });
           setLoading(false);
         })
         .catch((err) => {
@@ -128,7 +137,7 @@ export default function Dashboard() {
 
         {events.length === 0 ? (
           <div className="border border-neutral-200 bg-white p-12 text-center flex flex-col items-center justify-center space-y-4">
-            <div className="w-12 h-12 bg-neutral-100 flex items-center justify-center text-neutral-400 rounded-full">
+            <div className="w-12 h-12 bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0">
               <Calendar size={24} />
             </div>
             <div className="space-y-1">
@@ -173,7 +182,7 @@ export default function Dashboard() {
                       </p>
                     </div>
 
-                    <div className="w-16 h-16 bg-neutral-100 flex-shrink-0 border border-neutral-200">
+                    <div className="w-16 h-16 bg-neutral-100 shrink-0 border border-neutral-200">
                       <img
                         src={event.cover_image}
                         alt="Couverture"

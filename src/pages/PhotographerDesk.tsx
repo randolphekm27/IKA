@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, Trash2, Calendar, Loader2, AlertCircle, CheckCircle, UserCircle, RefreshCw } from "lucide-react";
 import { Event, Photo, User } from "../types";
 import UploadZone from "../components/UploadZone";
+import { supabase } from "../lib/supabase";
 
 export default function PhotographerDesk() {
   const { eventId } = useParams();
@@ -41,11 +42,11 @@ export default function PhotographerDesk() {
 
     // 2. Fetch event metadata and existing uploaded photos
     Promise.all([
-      fetch(`/api/events/${eventId}`).then((r) => {
-        if (!r.ok) throw new Error("Événement introuvable");
-        return r.json();
+      supabase.from('events').select('*').eq('id', eventId).single().then(({ data, error }) => {
+        if (error || !data) throw new Error("Événement introuvable");
+        return data;
       }),
-      fetch(`/api/events/${eventId}/photos`).then((r) => r.json()),
+      supabase.from('photos').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).then(({ data }) => data || []),
     ])
       .then(([eventData, photosData]) => {
         setEvent(eventData);
@@ -71,11 +72,9 @@ export default function PhotographerDesk() {
 
   const handleDeletePhoto = async (photoId: string) => {
     try {
-      const res = await fetch(`/api/photos/${photoId}`, {
-        method: "DELETE",
-      });
+      const { error } = await supabase.from('photos').delete().eq('id', photoId);
 
-      if (!res.ok) {
+      if (error) {
         throw new Error("Impossible de supprimer la photo.");
       }
 
@@ -221,7 +220,7 @@ export default function PhotographerDesk() {
 
           {photos.length === 0 ? (
             <div className="border border-dashed border-neutral-200 p-8 text-center text-neutral-400 bg-neutral-50/50 flex flex-col items-center justify-center min-h-[220px]">
-              <Camera size={24} className="text-neutral-300 stroke-[1] mb-1" />
+              <Camera size={24} className="text-neutral-300 stroke-1 mb-1" />
               <p className="text-xs text-neutral-500 font-semibold uppercase">Aucun fichier transmis</p>
               <p className="text-[10px] text-neutral-400 font-sans max-w-[170px] mx-auto mt-1">
                 Déchargez des photos à gauche pour les voir apparaître immédiatement ici.
@@ -234,7 +233,7 @@ export default function PhotographerDesk() {
                   key={photo.id}
                   className="bg-white border border-neutral-200 p-3 flex items-center justify-between gap-3 hover:border-black transition-all animate-fade-in"
                 >
-                  <div className="w-12 h-12 bg-neutral-100 overflow-hidden flex-shrink-0 border border-neutral-150">
+                  <div className="w-12 h-12 bg-neutral-100 overflow-hidden shrink-0 border border-neutral-150">
                     <img
                       src={photo.image_url}
                       alt=""

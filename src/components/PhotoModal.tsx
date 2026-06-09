@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Photo } from "../types";
 import { X, Download, User, Calendar, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 interface PhotoModalProps {
   photo: Photo | null;
@@ -39,31 +40,18 @@ export default function PhotoModal({
   if (!photo) return null;
 
   const handleDownload = async () => {
+    if (!photo) return;
     setDownloading(true);
-    try {
-      // 1. Notify server database to increment downloads
-      const res = await fetch(`/api/photos/${photo.id}/download`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (onDownloadIncrement) {
-          onDownloadIncrement(photo.id, data.download_count);
-        }
-      }
 
-      // 2. Perform direct cross-origin browser blob download
-      const imageRes = await fetch(photo.image_url);
-      const blob = await imageRes.blob();
-      const url = window.URL.createObjectURL(blob);
-      
+    try {
+      // 1. Create an invisible anchor to download the image file
       const link = document.createElement("a");
-      link.href = url;
-      link.download = `ika-photo-${photo.id}.jpg`;
+      link.href = photo.image_url;
+      link.download = `IKA_LIVE_${photo.id}.jpg`;
+      link.target = "_blank";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Direct download failed, falling back to basic redirect", err);
       const link = document.createElement("a");

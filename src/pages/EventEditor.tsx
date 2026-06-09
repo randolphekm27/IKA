@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Save, ChevronLeft, Image as ImageIcon, QrCode, AlertCircle, CheckCircle, Trash2, Loader2, MapPin, Copy, Check, User, UserPlus, UserMinus, Plus } from "lucide-react";
+import { Save, ChevronLeft, Image as ImageIcon, QrCode, AlertCircle, CheckCircle, Trash2, Loader2, MapPin, Copy, Check, User, UserPlus, UserMinus, Plus, Camera } from "lucide-react";
 import { Event, User as UserType } from "../types";
+import { supabase } from "../lib/supabase";
 import QRCodeDisplay from "../components/QRCodeDisplay";
 
 export default function EventEditor() {
@@ -56,39 +57,45 @@ export default function EventEditor() {
     // 2. If edit mode, retrieve existing details
     if (isEditMode && id) {
       setFetchingEvent(true);
-      fetch(`/api/events/${id}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("Événement introuvable");
-          return res.json();
-        })
-        .then((data: any) => {
+      
+      const fetchEvent = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('events')
+            .select('*')
+            .eq('id', id)
+            .single();
+            
+          if (error || !data) throw new Error("Événement introuvable");
           setEventId(data.id);
           setName(data.name);
-          setDescription(data.description);
-          setLocation(data.location);
+          setDescription(data.description || "");
+          setLocation(data.location || "");
           setDate(data.date || "");
-          setExistingCoverUrl(data.cover_image);
+          setExistingCoverUrl(data.cover_image || "");
           setSlug(data.slug);
-          setInviteToken(data.invite_token || "");
-          setIsInviteRevoked(data.invite_token_revoked || false);
           
           // Fetch linked photographers
-          return fetch(`/api/events/${data.id}/photographers`);
-        })
-        .then((res) => {
-          if (res && res.ok) {
-            return res.json();
+          const { data: photogList, error: pError } = await supabase
+            .from('event_photographers')
+            .select('*, users:photographer_id(name, email)')
+            .eq('event_id', data.id);
+            
+          if (!pError && photogList) {
+            const mapped = photogList.map((p: any) => ({
+              ...p,
+              name: p.users?.name,
+              email: p.users?.email
+            }));
+            setPhotographers(mapped);
           }
-          return [];
-        })
-        .then((photogList) => {
-          setPhotographers(photogList || []);
           setFetchingEvent(false);
-        })
-        .catch((err) => {
+        } catch (err: any) {
           setErrorMessage(err.message || "Erreur de chargement");
           setFetchingEvent(false);
-        });
+        }
+      };
+      fetchEvent();
     }
   }, [id, isEditMode, navigate]);
 
@@ -103,31 +110,41 @@ export default function EventEditor() {
     setSuccessMessage(null);
     setLoading(true);
 
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("description", description);
-    formData.append("location", location);
-    formData.append("date", date);
-    if (currentUser) {
-      formData.append("created_by", currentUser.id);
-    }
-    if (coverImageFile) {
-      formData.append("cover_image", coverImageFile);
-    }
-
-    const endpoint = isEditMode ? `/api/events/${id}` : "/api/events";
-    const method = isEditMode ? "PUT" : "POST";
-
     try {
-      const r = await fetch(endpoint, {
-        method,
-        body: formData,
-      });
+      let coverUrl = existingCoverUrl;
+      
+      // Basic image upload handling to Supabase Storage
+      if (coverImageFile) {
+        // Convert to base64 as a fallback if bucket doesn't exist, but standard is storage upload
+        // We'll use a data URL for simplicity in the mockup if storage isn't configured, 
+        // but normally we'd do supabase.storage.from('photos').upload(...)
+        const reader = new FileReader();
+        coverUrl = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(coverImageFile);
+        });
+      }
 
-      const resData = await r.json();
+      const generatedSlug = isEditMode ? slug : name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
 
-      if (!r.ok) {
-        throw new Error(resData.error || "Une erreur s'est produite lors de l'enregistrement.");
+      const eventData = {
+        name,
+        description,
+        location,
+        date: date || null,
+        cover_image: coverUrl,
+        slug: generatedSlug,
+        created_by: currentUser?.id,
+      };
+
+      let finalId = id;
+      if (isEditMode) {
+        const { error } = await supabase.from('events').update(eventData).eq('id', id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('events').insert([eventData]).select().single();
+        if (error) throw error;
+        finalId = data.id;
       }
 
       setSuccessMessage(
@@ -136,16 +153,15 @@ export default function EventEditor() {
           : "Événement créé avec succès ! Votre QR Code est actif."
       );
       
-      setEventId(resData.id);
-      setSlug(resData.slug);
-      setExistingCoverUrl(resData.cover_image);
+      setEventId(finalId || "");
+      setSlug(generatedSlug);
+      setExistingCoverUrl(coverUrl);
       
       if (!isEditMode) {
         // Stay on page to show the QR Code
         setCoverImageFile(null);
-        // Refresh token on create
         setTimeout(() => {
-          navigate(`/dashboard/events/edit/${resData.id}`);
+          navigate(`/dashboard/events/edit/${finalId}`);
         }, 1500);
       }
     } catch (err: any) {
@@ -163,13 +179,10 @@ export default function EventEditor() {
 
     setLoading(true);
     try {
-      const r = await fetch(`/api/events/${id}`, {
-        method: "DELETE",
-      });
+      const { error } = await supabase.from('events').delete().eq('id', id);
 
-      if (!r.ok) {
-        const d = await r.json();
-        throw new Error(d.error || "Échec suppression");
+      if (error) {
+        throw new Error("Échec suppression");
       }
 
       navigate("/dashboard");
@@ -201,18 +214,23 @@ export default function EventEditor() {
     setTogglingInvite(true);
     setErrorMessage(null);
     try {
-      const res = await fetch(`/api/events/${eventId}/invitation/toggle`, {
-        method: "POST"
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const { data: existing } = await supabase.from('invitation_tokens').select('*').eq('event_id', eventId).single();
+      
+      if (existing) {
+        const { data, error } = await supabase.from('invitation_tokens').update({ revoked: !existing.revoked }).eq('id', existing.id).select().single();
+        if (error) throw error;
         setInviteToken(data.token);
         setIsInviteRevoked(data.revoked || false);
         setSuccessMessage(data.revoked ? "Lien d'invitation photographe désactivé avec succès." : "Lien d'invitation photographe activé avec succès !");
-        setTimeout(() => setSuccessMessage(null), 3000);
       } else {
-        throw new Error("Échec de la modification de l'invitation.");
+        const tokenStr = Math.random().toString(36).substring(2, 12);
+        const { data, error } = await supabase.from('invitation_tokens').insert({ event_id: eventId, token: tokenStr }).select().single();
+        if (error) throw error;
+        setInviteToken(data.token);
+        setIsInviteRevoked(data.revoked || false);
+        setSuccessMessage("Lien d'invitation photographe activé avec succès !");
       }
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setErrorMessage(err.message || "Erreur lors du traitement du lien d'accès.");
     } finally {
@@ -224,21 +242,20 @@ export default function EventEditor() {
     if (!eventId) return;
     setErrorMessage(null);
     try {
-      const res = await fetch(`/api/events/${eventId}/photographers/${photographerId}/revoke`, {
-        method: "POST"
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPhotographers((prev) =>
-          prev.map((p) => (p.photographer_id === photographerId ? { ...p, revoked: updated.revoked } : p))
-        );
-        setSuccessMessage(updated.revoked ? "Accès du photographe suspendu avec succès." : "Accès du photographe activé avec succès !");
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } else {
-        throw new Error("Impossible de changer l'accès pour ce photographe.");
-      }
+      const { data: existing } = await supabase.from('event_photographers').select('*').eq('photographer_id', photographerId).eq('event_id', eventId).single();
+      if (!existing) throw new Error("Photographe introuvable.");
+
+      const { data: updated, error } = await supabase.from('event_photographers').update({ revoked: !existing.revoked }).eq('id', existing.id).select().single();
+      
+      if (error) throw error;
+      
+      setPhotographers((prev) =>
+        prev.map((p) => (p.photographer_id === photographerId ? { ...p, revoked: updated.revoked } : p))
+      );
+      setSuccessMessage(updated.revoked ? "Accès du photographe suspendu avec succès." : "Accès du photographe activé avec succès !");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      setErrorMessage(err.message);
+      setErrorMessage(err.message || "Impossible de changer l'accès pour ce photographe.");
     }
   };
 
@@ -250,35 +267,41 @@ export default function EventEditor() {
     setErrorMessage(null);
 
     try {
-      const res = await fetch(`/api/events/${eventId}/photographers/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: newPhotographerEmail,
-          name: newPhotographerName,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue lors de l'ajout.");
+      const { data: user, error: userErr } = await supabase.from('users').select('*').eq('email', newPhotographerEmail).single();
+      
+      if (userErr || !user) {
+        throw new Error("Aucun compte trouvé avec cet email. Demandez-lui de s'inscrire d'abord.");
       }
 
-      setPhotographers((prev) => {
-        const index = prev.findIndex((p) => p.photographer_id === data.photographer_id);
-        if (index !== -1) {
-          return prev.map((p) => p.photographer_id === data.photographer_id ? data : p);
+      const { data, error } = await supabase.from('event_photographers').insert({
+        event_id: eventId,
+        photographer_id: user.id
+      }).select('*, users:photographer_id(name, email)').single();
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error("Ce photographe est déjà rattaché à l'événement.");
         }
-        return [...prev, data];
+        throw new Error("Une erreur est survenue lors de l'ajout.");
+      }
+
+      const mappedData = {
+        ...data,
+        name: data.users?.name,
+        email: data.users?.email
+      };
+
+      setPhotographers((prev) => {
+        const index = prev.findIndex((p) => p.photographer_id === mappedData.photographer_id);
+        if (index !== -1) {
+          return prev.map((p) => p.photographer_id === mappedData.photographer_id ? mappedData : p);
+        }
+        return [...prev, mappedData];
       });
 
       setNewPhotographerEmail("");
       setNewPhotographerName("");
-      setSuccessMessage(
-        data.isNewUser
-          ? `Photographe créé et ajouté ! Compte d'accès généré (Mot de passe d'essai: password123)`
-          : `Photographe rattaché avec succès à l'événement live.`
-      );
+      setSuccessMessage(`Photographe rattaché avec succès à l'événement live.`);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -417,7 +440,7 @@ export default function EventEditor() {
               </label>
               <div className="flex items-center gap-4">
                 {(coverImageFile || existingCoverUrl) && (
-                  <div className="w-20 h-14 bg-neutral-100 border border-neutral-300 overflow-hidden flex-shrink-0">
+                  <div className="w-10 h-10 bg-neutral-100 flex items-center justify-center shrink-0">
                     <img
                       src={coverImageFile ? URL.createObjectURL(coverImageFile) : existingCoverUrl}
                       alt="Aperçu couverture"
@@ -498,7 +521,7 @@ export default function EventEditor() {
             </div>
           ) : (
             <div className="border border-dashed border-neutral-300 p-8 text-center text-neutral-400 bg-white flex flex-col items-center justify-center min-h-[300px]">
-              <QrCode size={40} className="stroke-[1] mb-2 text-neutral-300" />
+              <Camera size={24} className="text-neutral-300 mb-1" />
               <p className="text-xs font-semibold uppercase text-black">Génération inactive</p>
               <p className="text-[11px] text-neutral-400 max-w-[200px] mx-auto mt-2 font-sans">
                 Remplissez et enregistrez le formulaire de gauche à droite pour obtenir le QR Code live téléchargeable.

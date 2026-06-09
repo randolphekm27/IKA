@@ -4,6 +4,7 @@ import { Camera, MapPin, Download, AlertCircle, Loader2, ArrowLeft, RefreshCw } 
 import { Event, Photo } from "../types";
 import PhotoCard from "../components/PhotoCard";
 import PhotoModal from "../components/PhotoModal";
+import { supabase } from "../lib/supabase";
 
 export default function LiveGallery() {
   const { slug } = useParams();
@@ -21,13 +22,18 @@ export default function LiveGallery() {
     if (!slug) return;
 
     setLoading(true);
-    // 1. Fetch current event parameters by slug
-    fetch(`/api/events/${slug}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Événement introuvable ou archivé.");
-        return res.json();
-      })
-      .then((eventData: Event) => {
+    let subscription: any;
+
+    const fetchEventAndPhotos = async () => {
+      try {
+        const { data: eventData, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('slug', slug)
+          .single();
+
+        if (error || !eventData) throw new Error("Événement introuvable ou archivé.");
+        
         setEvent(eventData);
         eventIdRef.current = eventData.id;
 
@@ -38,72 +44,60 @@ export default function LiveGallery() {
           sessionStorage.setItem("ika_visitor_token", visitorToken);
         }
 
-        fetch(`/api/events/${eventData.id}/visit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visitor_token: visitorToken })
-        }).catch((err) => console.warn("Failed tracking visit statistics", err));
+        // Fire and forget visit tracking without await/catch issues
+        const trackVisit = async () => {
+           const { error } = await supabase.from('visits').insert({ event_id: eventData.id, visitor_token: visitorToken });
+           if (error) console.warn("Failed tracking visit", error);
+        };
+        trackVisit();
 
-        // 2. Fetch current loaded photos
-        return fetch(`/api/events/${eventData.id}/photos`);
-      })
-      .then((res) => {
-        if (!res) return;
-        return res.json();
-      })
-      .then((photosList: Photo[]) => {
-        if (photosList) {
-          setPhotos(photosList);
-        }
+        const { data: photosData, error: photosError } = await supabase
+          .from('photos')
+          .select('*')
+          .eq('event_id', eventData.id)
+          .order('created_at', { ascending: false });
+
+        if (photosData) setPhotos(photosData);
         setLoading(false);
 
-        // 3. Open Server-Sent Events (SSE) Live Feed Subscription
         const eventId = eventIdRef.current;
         if (!eventId) return;
 
-        const sseUrl = `/api/events/${eventId}/live-stream`;
-        console.log(`Connecting Live Stream SSE: ${sseUrl}`);
-        const eventSource = new EventSource(sseUrl);
-
-        eventSource.onopen = () => {
-          setLiveConnected(true);
-          console.log("IKA Live Connection established.");
-        };
-
-        eventSource.onerror = (e) => {
-          setLiveConnected(false);
-          console.warn("IKA Live Connection lost. Retrying standard polling...");
-        };
-
-        eventSource.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (data.type === "NEW_PHOTO") {
-              const newPhoto: Photo = data.payload;
-              // Add to the top of the gallery grid immediately
-              setPhotos((prev) => {
-                // Prevent duplicate inserts
-                if (prev.some((p) => p.id === newPhoto.id)) return prev;
-                return [newPhoto, ...prev];
-              });
-            } else if (data.type === "DELETE_PHOTO") {
-              const deletedId = data.payload.id;
-              setPhotos((prev) => prev.filter((p) => p.id !== deletedId));
+        console.log(`Connecting Live Stream via Supabase Realtime...`);
+        subscription = supabase
+          .channel(`public:photos:${eventId}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos', filter: `event_id=eq.${eventId}` }, (payload) => {
+            const newPhoto = payload.new as Photo;
+            setPhotos((prev) => {
+              if (prev.some((p) => p.id === newPhoto.id)) return prev;
+              return [newPhoto, ...prev];
+            });
+          })
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'photos', filter: `event_id=eq.${eventId}` }, (payload) => {
+            const deletedId = payload.old.id;
+            setPhotos((prev) => prev.filter((p) => p.id !== deletedId));
+          })
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              setLiveConnected(true);
+              console.log("IKA Live Connection established.");
+            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+              setLiveConnected(false);
             }
-          } catch (err) {
-            console.error("Failed to parse live EventSource frame", err);
-          }
-        };
-
-        return () => {
-          console.log("Closing SSE Stream connection");
-          eventSource.close();
-        };
-      })
-      .catch((err) => {
+          });
+      } catch (err: any) {
         setErrorMsg(err.message || "Erreur de chargement de la galerie");
         setLoading(false);
-      });
+      }
+    };
+    fetchEventAndPhotos();
+
+    return () => {
+      if (subscription) {
+        console.log("Closing SSE Stream connection");
+        supabase.removeChannel(subscription);
+      }
+    };
   }, [slug]);
 
   // Synchronize modal state statistics if a photo is downloaded inside the modal
@@ -262,7 +256,7 @@ export default function LiveGallery() {
             </Link>
           </div>
         ) : (
-          <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-[1px] bg-black">
+          <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-px bg-black">
             {photos.map((photo) => (
               <PhotoCard
                 key={photo.id}
