@@ -91,6 +91,15 @@ export default function Navbar() {
               Accueil
             </Link>
 
+            <Link
+              to="/about"
+              className={`text-sm font-medium transition-colors ${
+                location.pathname === "/about" || location.pathname === "/a-propos" ? "text-black" : "text-neutral-500 hover:text-black"
+              }`}
+            >
+              À propos
+            </Link>
+
             {user && (user.role === "organisateur" || user.role === "admin") && (
               <Link
                 to="/dashboard"
@@ -183,6 +192,14 @@ export default function Navbar() {
             className="block px-3 py-2 rounded-md text-base font-medium text-neutral-600 hover:text-black hover:bg-neutral-50"
           >
             Accueil
+          </Link>
+
+          <Link
+            to="/about"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-md text-base font-medium text-neutral-600 hover:text-black hover:bg-neutral-50"
+          >
+            À propos
           </Link>
 
           {user && (user.role === "organisateur" || user.role === "admin") && (

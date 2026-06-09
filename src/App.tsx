@@ -13,6 +13,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import JoinEvent from "./pages/JoinEvent";
 import PhotographerDashboard from "./pages/PhotographerDashboard";
+import About from "./pages/About";
 
 function AppLayout() {
   const location = useLocation();
@@ -25,6 +26,8 @@ function AppLayout() {
       <main className="flex-1 flex flex-col">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/a-propos" element={<About />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

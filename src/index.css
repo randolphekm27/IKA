@@ -6,6 +6,24 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+:root {
+  --color-text-primary: #000000;
+  --color-text-secondary: #4a5568;
+  --color-text-tertiary: #718096;
+  --color-background-secondary: #f7fafc;
+  --color-border-tertiary: #e2e8f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #a0aec0;
+    --color-text-tertiary: #718096;
+    --color-background-secondary: #1a202c;
+    --color-border-tertiary: #2d3748;
+  }
+}
+
 body {
   font-family: "Sora", ui-sans-serif, system-ui, sans-serif;
   background-color: #F9F9F9;
